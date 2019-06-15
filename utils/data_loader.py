@@ -13,7 +13,7 @@ class QNLILoader():
     # examples --> features
     def get_features(self):
         examples = self.get_examples()
-        lbl_map = {'not_entailment': 0, 'entailment': 1}
+        lbl_map = {'not_entailment': 1, 'entailment': 0}
 
         tokenizer = BertTokenizer.from_pretrained(self.args.bert_model, do_lower_case=self.args.lower_case)
         features = []

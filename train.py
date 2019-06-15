@@ -6,8 +6,9 @@ from tqdm import tqdm, trange
 import numpy as np
 import torch
 from torch.nn import CrossEntropyLoss, MSELoss
-from torch.utils.data import DataLoader, RandomSampler, TensorDataset
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 
+from pytorch_pretrained_bert.modeling import BertForSequenceClassification, BertConfig
 from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
 
 from models.bert import BertCls
@@ -39,7 +40,7 @@ def train(args):
     torch.manual_seed(args.random_seed)
 
     # =============== Setup Data ================== #
-    train_loader = QNLILoader(args, 'train')
+    train_loader = QNLILoader(args, 'dev')
     dev_loader = QNLILoader(args, 'dev')
     
     import pickle
@@ -61,22 +62,37 @@ def train(args):
     all_input_mask = torch.tensor([f['input_mask'] for f in train_features], dtype=torch.long)
     all_segment_ids = torch.tensor([f['segment_ids'] for f in train_features], dtype=torch.long)
     all_label_ids = torch.tensor([f['lbl'] for f in train_features], dtype=torch.long)
+    # all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
+    # all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
+    # all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
+    # all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
+
 
     train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
     train_sampler = RandomSampler(train_data)
     train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.batch_size)
 
-    all_input_ids = torch.tensor([f['input_ids'] for f in dev_features], dtype=torch.long)
-    all_input_mask = torch.tensor([f['input_mask'] for f in dev_features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f['segment_ids'] for f in dev_features], dtype=torch.long)
-    all_label_ids = torch.tensor([f['lbl'] for f in dev_features], dtype=torch.long)
+    all_input_ids_eval = torch.tensor([f['input_ids'] for f in dev_features], dtype=torch.long)
+    all_input_mask_eval = torch.tensor([f['input_mask'] for f in dev_features], dtype=torch.long)
+    all_segment_ids_eval = torch.tensor([f['segment_ids'] for f in dev_features], dtype=torch.long)
+    all_label_ids_eval = torch.tensor([f['lbl'] for f in dev_features], dtype=torch.long)
 
-    dev_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-    dev_sampler = RandomSampler(dev_data)
+    # all_input_ids_eval = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+    # all_input_mask_eval = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+    # all_segment_ids_eval = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+    # all_label_ids_eval = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+
+    dev_data = TensorDataset(all_input_ids_eval, all_input_mask_eval, all_segment_ids_eval, all_label_ids_eval)
+    dev_sampler = SequentialSampler(dev_data)
     dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.batch_size)
 
     # =============== Setup Model ================== #
     model = BertCls(args.bert_model)
+    # model = BertForSequenceClassification.from_pretrained(
+    #             'data/.cache/bert-base-uncased.tar.gz',
+    #             # args.bert_model,
+    #             # cache_dir='data.cache',
+    #             num_labels=2)
     model.to(device)
 
     # =============== Setup Optimizer ================== #
@@ -86,6 +102,7 @@ def train(args):
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
+    # print(optimizer_grouped_parameters)
     optimizer = BertAdam(optimizer_grouped_parameters, lr=args.lr, warmup=args.warmup_proportion, t_total=num_train_optimization_steps)
 
     # =============== Training ================== #
@@ -140,15 +157,25 @@ def train(args):
             eval_loss += loss.item()
             num_eval_steps += 1
 
-            preds.append(logits.detach().cpu().numpy())
+            # preds.append(logits.detach().cpu().numpy())
 
-        np_pred = np.zeros((0, 2))
-        for pred in preds:
-            np_pred = np.append(np_pred, pred, axis=0)
-        np_pred = np.argmax(np_pred, axis=1)
-        eval_loss /= num_eval_steps
+            if len(preds) == 0:
+                preds.append(logits.detach().cpu().numpy())
+            else:
+                preds[0] = np.append(
+                    preds[0], logits.detach().cpu().numpy(), axis=0)
+        preds = preds[0]
+        preds = np.argmax(preds, axis=1)
+        print(preds.mean())
 
-        acc = (np_pred == all_label_ids.numpy()).mean()
+        # np_pred = np.zeros((0, 2))
+        # for pred in preds:
+        #     np_pred = np.append(np_pred, pred, axis=0)
+        # np_pred = np.argmax(np_pred, axis=1)
+        # eval_loss /= num_eval_steps
+
+        acc = (preds == all_label_ids_eval.numpy()).mean()
+        print(acc)
         logger.info('[epoch: %d ] accuracy: %0.4f' % (ep, acc))
 
         # save checkpoint
