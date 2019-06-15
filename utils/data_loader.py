@@ -9,11 +9,11 @@ class QNLILoader():
         self.data_path = args.data_path
         self.mode = mode
         self.num_samples = None
+        self.lbl_map = {'not_entailment': 1, 'entailment': 0}
 
     # examples --> features
     def get_features(self):
         examples = self.get_examples()
-        lbl_map = {'not_entailment': 1, 'entailment': 0}
 
         tokenizer = BertTokenizer.from_pretrained(self.args.bert_model, do_lower_case=self.args.lower_case)
         features = []
@@ -45,7 +45,7 @@ class QNLILoader():
             input_mask += padding
             segment_ids += padding
 
-            lbl = lbl_map[example['lbl']]
+            lbl = self.lbl_map[example['lbl']]
 
             features.append({'input_ids': input_ids, 'input_mask': input_mask, 'segment_ids': segment_ids, 'lbl': lbl})
 

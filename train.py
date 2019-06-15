@@ -40,7 +40,7 @@ def train(args):
     torch.manual_seed(args.random_seed)
 
     # =============== Setup Data ================== #
-    train_loader = QNLILoader(args, 'dev')
+    train_loader = QNLILoader(args, 'train')
     dev_loader = QNLILoader(args, 'dev')
     
     import pickle
@@ -179,11 +179,11 @@ def train(args):
         logger.info('[epoch: %d ] accuracy: %0.4f' % (ep, acc))
 
         # save checkpoint
-        logger.info('Save better model in epoch %d' % ep)
         if acc > best_acc:
             best_acc = acc
             save_path = os.path.join(args.model_path, 'bertcls_lr%f_batchsize%d_ep%d_acc%0.4f.pth' % (args.lr, args.batch_size, ep, acc))
             torch.save(model.state_dict(), save_path)
+            logger.info('Save better model in epoch %d' % ep)
 
         # load checkpoint
         # model1 = BertCls(args.bert_model)

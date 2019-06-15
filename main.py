@@ -15,6 +15,7 @@ from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
 
 from train import train
+from test import test
 
 
 def init_args():
@@ -23,6 +24,7 @@ def init_args():
     # basic setting
     parser.add_argument('--data_path', default='data', type=str, help='path to the data files')
     parser.add_argument('--model_path', default='trained_models', type=str, help='path to the trained models')
+    parser.add_argument('--model_name', type=str, help='trained model for testing')
     parser.add_argument('--log_path', default='logs', type=str, help='path to logs')
     parser.add_argument('--mode', default='train', type=str, help='train or eval')
     parser.add_argument('--lower_case', action='store_true', help='whether to uncase the sequence')
@@ -47,16 +49,6 @@ def init_args():
 if __name__ == '__main__':
     args = init_args()
 
-    class InputFeatures(object):
-        """A single set of features of data."""
-
-        def __init__(self, input_ids, input_mask, segment_ids, label_id):
-            self.input_ids = input_ids
-            self.input_mask = input_mask
-            self.segment_ids = segment_ids
-            self.label_id = label_id
-
-
     # setup directory
     if not os.path.exists(args.model_path):
         os.makedirs(args.model_path)
@@ -64,3 +56,6 @@ if __name__ == '__main__':
     if args.mode == 'train':
         print('======= training mode ========')
         train(args)
+    elif args.mode == 'test':
+        print('======= testing mode ========')
+        test(args)
