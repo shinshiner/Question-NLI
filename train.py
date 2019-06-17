@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from pytorch_pretrained_bert.modeling import BertForSequenceClassification, BertConfig
 from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
 
-from models.bert import BertCls
+from models.bert import *
 from utils.data_loader import QNLILoader
 
 
@@ -44,14 +44,28 @@ def train(args):
     dev_loader = QNLILoader(args, 'dev')
     
     import pickle
-    if not os.path.exists('data/.cache/features.pkl'):
-        train_features = train_loader.get_features()
-        dev_features = dev_loader.get_features()
-        with open('data/.cache/features.pkl', 'wb') as f:
-            pickle.dump([train_features, dev_features], f)
+    if train_loader.mode == 'new_test':
+        if not os.path.exists('data/.cache/features_tr_t.pkl'):
+            print('generating features for %s ' % train_loader.mode)
+            train_features = train_loader.get_features()
+            dev_features = dev_loader.get_features()
+            with open('data/.cache/features_tr_t.pkl', 'wb') as f:
+                pickle.dump([train_features, dev_features], f)
+        else:
+            print('loading features for %s ' % train_loader.mode)
+            with open('data/.cache/features_tr_t.pkl', 'rb') as f:
+                train_features, dev_features = pickle.load(f)
     else:
-        with open('data/.cache/features.pkl', 'rb') as f:
-            train_features, dev_features = pickle.load(f)
+        if not os.path.exists('data/.cache/features.pkl'):
+            print('generating features for %s ' % train_loader.mode)
+            train_features = train_loader.get_features()
+            dev_features = dev_loader.get_features()
+            with open('data/.cache/features.pkl', 'wb') as f:
+                pickle.dump([train_features, dev_features], f)
+        else:
+            print('loading features for %s ' % train_loader.mode)
+            with open('data/.cache/features.pkl', 'rb') as f:
+                train_features, dev_features = pickle.load(f)
 
     num_samples = len(train_features)
     num_labels = 2
@@ -87,7 +101,7 @@ def train(args):
     dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.batch_size)
 
     # =============== Setup Model ================== #
-    model = BertCls(args.bert_model)
+    model = BertClsMLP(args.bert_model)
     # model = BertForSequenceClassification.from_pretrained(
     #             'data/.cache/bert-base-uncased.tar.gz',
     #             # args.bert_model,
@@ -97,11 +111,17 @@ def train(args):
 
     # =============== Setup Optimizer ================== #
     param_optimizer = list(model.named_parameters())
+    # param_optimizer = list(filter(lambda p: p.requires_grad, model.parameters()))
+    # print(param_optimizer)
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
+    for paras in optimizer_grouped_parameters:
+        print(len(paras['params']))
+        paras['params'] = list(filter(lambda p: p.requires_grad, paras['params']))
+        print(len(paras['params']))
     # print(optimizer_grouped_parameters)
     optimizer = BertAdam(optimizer_grouped_parameters, lr=args.lr, warmup=args.warmup_proportion, t_total=num_train_optimization_steps)
 
@@ -184,6 +204,8 @@ def train(args):
             save_path = os.path.join(args.model_path, 'bertcls_lr%f_batchsize%d_ep%d_acc%0.4f.pth' % (args.lr, args.batch_size, ep, acc))
             torch.save(model.state_dict(), save_path)
             logger.info('Save better model in epoch %d' % ep)
+        save_path = os.path.join(args.model_path, 'bertcls_lr%f_batchsize%d_last.pth' % (args.lr, args.batch_size))
+        torch.save(model.state_dict(), save_path)
 
         # load checkpoint
         # model1 = BertCls(args.bert_model)

@@ -1,0 +1,3 @@
+#bertcnnmlp|trained_models/896bertcls_lr0.000020_batchsize16_ep3_acc0.9129.pth
+#rawbert|/home/data2/shin/Squad1/Squad/trained_models/bertcls_lr0.000020_batchsize16_ep2_acc0.9120.pth
+bertmlp|trained_models/bertcls_lr0.000020_batchsize16_ep3_acc0.9131.pth

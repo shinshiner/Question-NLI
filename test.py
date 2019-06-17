@@ -6,12 +6,13 @@ from tqdm import tqdm, trange
 import numpy as np
 import torch
 from torch.nn import CrossEntropyLoss, MSELoss
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 
 from pytorch_pretrained_bert.modeling import BertForSequenceClassification, BertConfig
 from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
 
-from models.bert import BertCls
+from models.bert import *
 from utils.data_loader import QNLILoader
 
 
@@ -62,39 +63,56 @@ def test(args):
     test_sampler = SequentialSampler(test_data)
     test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.batch_size)
 
-    model = BertCls(args.bert_model)
-    model.to(device)
-    print('loading model from : %s' % os.path.join(args.model_path, args.model_name))
-    model.load_state_dict(torch.load(os.path.join(args.model_path, args.model_name)))
+    # =============== Setup Models ================== #
+    model_map = {'rawbert': RawBertCls, 'bertcnnmlp': BertClsCNNMLP, 'bertmlp': BertClsMLP}
+    with open('model_list.txt', 'r') as f:
+        model_list = f.readlines()
+    models = []
+    for m in model_list:
+        if m[0] == '#':
+            continue
+        model_type, model_path = m.split('|')
+        model = model_map[model_type](args)
+        model.load_state_dict(torch.load(model_path[:-1]))
+        model.to(device)
+        model.eval()
+        models.append(model)
+        print('load model from: ', model_path[:-1])
+    # model = BertCls(args.bert_model)
+    # model.to(device)
+    # print('loading model from : %s' % os.path.join(args.model_path, args.model_name))
+    # model.load_state_dict(torch.load(os.path.join(args.model_path, args.model_name)))
 
     # =============== Testing ================== #
     preds = []
+    debug = 0
+    f = open('QNLI.tsv', 'w')
+    f.write('index\tprediction\n')
+
     for step, batch in enumerate(tqdm(test_dataloader, desc="Testing")):
         batch = tuple(t.to(device) for t in batch)
         input_ids, input_mask, segment_ids = batch
 
+        max_probs_list = []
+        prob_list = []
+        pred_list = []
         with torch.no_grad():
-            logits = model(input_ids, segment_ids, input_mask, labels=None)
+            for model in models:
+                logit = model(input_ids, segment_ids, input_mask, labels=None)
+                prob = F.softmax(logit, dim=-1)
 
-        # preds.append(logits.detach().cpu().numpy())
+                pred = prob.max(1, keepdim=True)[1].cpu().numpy()
+                prob_list.append(prob.cpu().detach().numpy()[0])
+                max_probs_list.append(prob.max(1, keepdim=True)[0].cpu().detach().numpy()[0][0])
+                # logits.append(logit.detach().cpu().numpy())
+                pred_list.append(pred)
+        # logits = np.array(logits)
+        if debug and step > debug:
+            break
 
-        if len(preds) == 0:
-            preds.append(logits.detach().cpu().numpy())
-        else:
-            preds[0] = np.append(
-                preds[0], logits.detach().cpu().numpy(), axis=0)
-
-    preds = preds[0]
-    preds = np.argmax(preds, axis=1)
-
-        # np_pred = np.zeros((0, 2))
-        # for pred in preds:
-        #     np_pred = np.append(np_pred, pred, axis=0)
-        # np_pred = np.argmax(np_pred, axis=1)
-        # eval_loss /= num_eval_steps
-
-    with open('submission.tsv', 'w') as f: 
-        f.write('index\tprediction\n')
-        for i, pred in enumerate(preds):
-            f.write(str(i) + '\t' + lbl_map[pred] + '\n')
+        max_probs_list = np.array(max_probs_list)
+        max_pred = pred_list[np.argmax(max_probs_list)][0][0]
+        f.write(str(step) + '\t' + lbl_map[max_pred] + '\n')
+            
     print('test ended')
+    f.close()

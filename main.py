@@ -37,7 +37,7 @@ def init_args():
     # training settings
     parser.add_argument('--max_seq_len', default=128,  type=int, help='maximum length of input sequence')
     parser.add_argument('--num_epochs', default=50,  type=int, help='training epochs')
-    parser.add_argument('--lr', default=5e-5, type=float, help='learning rate')
+    parser.add_argument('--lr', default=2e-5, type=float, help='learning rate')
     parser.add_argument('--batch_size', default=16, type=int, help='batch size')
     parser.add_argument('--warmup_proportion', default=0.1, type=float, help='Proportion of linear learning rate warmup')
 
