@@ -5,6 +5,8 @@ __pycache__/
 
 data/*
 submission/*
+logs/*
+report/*
 
 # C extensions
 *.so

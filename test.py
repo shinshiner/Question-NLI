@@ -18,7 +18,7 @@ from utils.data_loader import QNLILoader
 
 def test(args):
     # =============== Setup GPU ================== #
-    if args.gpu and args.gpu_id != -1 and torch.cuda.is_available():
+    if args.gpu_id != -1:
         torch.cuda.set_device(args.gpu_id)
         device = torch.device('cuda', args.gpu_id)
 
@@ -43,7 +43,6 @@ def test(args):
     # =============== Setup Data ================== #
     test_loader = QNLILoader(args, 'test')
     lbl_map = {v: k for k, v in test_loader.lbl_map.items()}
-    print(lbl_map)
 
     import pickle
     if not os.path.exists('data/.cache/features_t.pkl'):
@@ -54,7 +53,6 @@ def test(args):
         with open('data/.cache/features_t.pkl', 'rb') as f:
             test_features = pickle.load(f)
 
-
     all_input_ids = torch.tensor([f['input_ids'] for f in test_features], dtype=torch.long)
     all_input_mask = torch.tensor([f['input_mask'] for f in test_features], dtype=torch.long)
     all_segment_ids = torch.tensor([f['segment_ids'] for f in test_features], dtype=torch.long)
@@ -64,7 +62,7 @@ def test(args):
     test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.batch_size)
 
     # =============== Setup Models ================== #
-    model_map = {'rawbert': RawBertCls, 'bertcnnmlp': BertClsCNNMLP, 'bertmlp': BertClsMLP}
+    model_map = {'rawbert': RawBertCls, 'bertcnnmlp': BertClsCNNMLP, 'bertmlp': BertClsMLP, 'bertlstm': BertClsLSTM}
     with open('model_list.txt', 'r') as f:
         model_list = f.readlines()
     models = []
@@ -72,20 +70,18 @@ def test(args):
         if m[0] == '#':
             continue
         model_type, model_path = m.split('|')
-        model = model_map[model_type](args)
-        model.load_state_dict(torch.load(model_path[:-1]))
+        model = model_map[model_type](args.bert_model, args)
+        if model_path[-1] == '\n':
+            model.load_state_dict(torch.load(model_path[:-1]))
+        else:
+            model.load_state_dict(torch.load(model_path))
         model.to(device)
         model.eval()
         models.append(model)
         print('load model from: ', model_path[:-1])
-    # model = BertCls(args.bert_model)
-    # model.to(device)
-    # print('loading model from : %s' % os.path.join(args.model_path, args.model_name))
-    # model.load_state_dict(torch.load(os.path.join(args.model_path, args.model_name)))
 
     # =============== Testing ================== #
     preds = []
-    debug = 0
     f = open('QNLI.tsv', 'w')
     f.write('index\tprediction\n')
 
@@ -104,14 +100,19 @@ def test(args):
                 pred = prob.max(1, keepdim=True)[1].cpu().numpy()
                 prob_list.append(prob.cpu().detach().numpy()[0])
                 max_probs_list.append(prob.max(1, keepdim=True)[0].cpu().detach().numpy()[0][0])
-                # logits.append(logit.detach().cpu().numpy())
                 pred_list.append(pred)
-        # logits = np.array(logits)
-        if debug and step > debug:
-            break
 
         max_probs_list = np.array(max_probs_list)
-        max_pred = pred_list[np.argmax(max_probs_list)][0][0]
+
+        # ensemble
+        if args.vote == 'hard':
+            max_pred = pred_list[np.argmax(max_probs_list)][0][0]
+        elif args.vote == 'soft':
+            prob_sum = np.zeros((2))
+            for sub_prob in prob_list:
+                prob_sum += sub_prob
+            max_pred = np.argmax(prob_sum)
+
         f.write(str(step) + '\t' + lbl_map[max_pred] + '\n')
             
     print('test ended')

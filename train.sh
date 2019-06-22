@@ -1,0 +1,1 @@
+python3 main.py --mode train --lower_case --gpu --gpu_id 0 --max_seq_len 128 --num_epochs 20 --lr 2e-5 --batch_size 32 --warmup_proportion 0.1

@@ -1,1 +1,1 @@
-python3 main.py --mode test --lower_case --gpu --gpu_id 1 --batch_size 8 --model_name bertcls_lr0.000020_batchsize16_ep2_acc0.9120.pth
+python3 main.py --mode test --lower_case --gpu --gpu_id 0 --batch_size 1 --vote hard
